@@ -48,8 +48,8 @@ Source: Google's "Illustrate a book: The Wind in the Willows" notebook
 
 ## Step 3 - Portrait
 - Call type: one `client.interactions.create()` per character, each
-  chained off the previous image interaction's id (own sequential chain,
-  distinct from the book/style/characters text chain) 
+chained off the previous image interaction's id (own sequential chain,
+distinct from the book/style/characters text chain) 
 - Setup: A first interaction establishes style + system instructions as a plain message, not a system instruction param (this model currently ignores sys instructio)
 - Input: Create an illustration for {name} following this description: \{prompt}`/ character
 - Response modality: image only, aspect_ratio 9:16
@@ -57,5 +57,18 @@ Source: Google's "Illustrate a book: The Wind in the Willows" notebook
 model_output step with image content, come back as base64 + mime type
 - Loop is sliced to `max_character_images`
 - This confirms two separate interaction chains need tracking per project (a text chain and an image chain, not just one)
+
+## Step 4 - Chapters
+- Call type: client.interactions.create()`, chained off
+characters_prompts_interaction.id (continues the TEXT chain, not the
+image chain)
+- Input: ask Gemini for one illustration prompt per chapter, a single image,  not multi-tiled, it should be very descriptive, explicity naming characters and reusing their established character prompts if they appear, plus listing which character appear in each character
+- Output: structured JSON via response_format, same Prompt schema as
+characters (array of { name, prompt }), where name here is the chapter
+title rather than a character name.
+- Result is sliced with `[:max_chapter_images]` after parsing which is same
+pattern as characters, needs finding the actual value, and again this
+is enforced by slicing after the fact, not by the prompt itself.
+
 
 
