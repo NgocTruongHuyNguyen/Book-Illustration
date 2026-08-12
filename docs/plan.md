@@ -44,5 +44,18 @@ Source: Google's "Illustrate a book: The Wind in the Willows" notebook
   service_tier=...)`
 - Input: prompt asks Gemini to describe the main characters, adults only and to prepare an image-generation prompt for each, at least 50 words long
 - Output: Structured JSON via response_format, schema = array of Prompt objects, each with `name` and `prompt` fields
-- Cap: The notebook does not limit character count in the prompt, output can be longer than 2. Our max-2 cap must be enforced server-side, not left to the prompt,
+- Cap: The notebook does not limit character count in the prompt, output can be longer than 2. Our max-2 cap must be enforced server-side, not left to the prompt
+
+## Step 3 - Portrait
+- Call type: one `client.interactions.create()` per character, each
+  chained off the previous image interaction's id (own sequential chain,
+  distinct from the book/style/characters text chain) 
+- Setup: A first interaction establishes style + system instructions as a plain message, not a system instruction param (this model currently ignores sys instructio)
+- Input: Create an illustration for {name} following this description: \{prompt}`/ character
+- Response modality: image only, aspect_ratio 9:16
+- Output: image extracted by walking interaction.steps in reverse for a
+model_output step with image content, come back as base64 + mime type
+- Loop is sliced to `max_character_images`
+- This confirms two separate interaction chains need tracking per project (a text chain and an image chain, not just one)
+
 
