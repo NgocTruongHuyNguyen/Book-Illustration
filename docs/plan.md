@@ -10,7 +10,7 @@ Source: Google's "Illustrate a book: The Wind in the Willows" notebook
   (`book_interaction`)
 - Every subsequent step calls `client.interactions.create(...,
   previous_interaction_id=<id of the prior step's interaction>, ...)`.
-  This is the Interactions API help Gemini maintains the conversation
+  This is the Interactions API, since Gemini maintains the conversation
   server-side
 - You never re-send book text or prior step outputs.
 - Each step's response becomes the `previous_interaction_id` for the
@@ -22,6 +22,11 @@ Source: Google's "Illustrate a book: The Wind in the Willows" notebook
   create the root interaction; store its ID. After every step, store
   the new interaction's ID as "last_interaction_id" for that project —
   this is critical resumability state, not just a nice-to-have.
+
+## Architecture note: two parallel chains
+Text chain: book_interaction → style → characters → chapters
+Image chain: portrait_setup → portrait₁ → portrait₂ → chapter_setup → illustration₁
+Backend must persist both chains' latest interaction IDs per project.
 
 ## Models
 - Text steps (Style, Characters, Chapters): GEMINI_MODEL_ID = gemini-3.6-flash
@@ -70,5 +75,13 @@ title rather than a character name.
 pattern as characters, needs finding the actual value, and again this
 is enforced by slicing after the fact, not by the prompt itself.
 
+## Step 5 - Illustrations
+- Call type: one `client.interactions.create()` per chapter, continuing
+the IMAGE chain. Chain off `last_image_interaction`, which at this point is the final portrait interaction from Step 3.
+- Setup: a transition interaction tell Gemini illustration of chapters is starting and explicity instructs it to refer back to its own previously generated character illustrations for consistency, while allowing pose/position to change
+- Input: `Create an illustration for {chapter name} using
+the previously generated characters following this description:
+{chapter prompt}`, no image data is re-attached, consistency relies entirely on the model's memory within the chained conversation
+- Output: Image extracted the same way as portraits, walk interaction.steps in reverse model_output step with image content, base64 + mime type
 
 
