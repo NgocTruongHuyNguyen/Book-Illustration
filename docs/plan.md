@@ -49,7 +49,7 @@ Backend must persist both chains' latest interaction IDs per project.
   service_tier=...)`
 - Input: prompt asks Gemini to describe the main characters, adults only and to prepare an image-generation prompt for each, at least 50 words long
 - Output: Structured JSON via response_format, schema = array of Prompt objects, each with `name` and `prompt` fields
-- Cap: The notebook does not limit character count in the prompt, output can be longer than 2. Our max-2 cap must be enforced server-side, not left to the prompt
+- Cap: The notebook does not limit character count in the prompt, output can be longer than 2. The notebook's own default cap, max_character_images is 5. Our max-2 cap must be enforced server-side, not left to the prompt
 
 ## Step 3 - Portrait
 - Call type: one `client.interactions.create()` per character, each
@@ -73,7 +73,7 @@ characters (array of { name, prompt }), where name here is the chapter
 title rather than a character name.
 - Result is sliced with `[:max_chapter_images]` after parsing which is same
 pattern as characters, needs finding the actual value, and again this
-is enforced by slicing after the fact, not by the prompt itself.
+is enforced by slicing after the fact, not by the prompt itself. The notebook's default for max_chapter_images is 3, above our rquired max of 1.
 
 ## Step 5 - Illustrations
 - Call type: one `client.interactions.create()` per chapter, continuing
