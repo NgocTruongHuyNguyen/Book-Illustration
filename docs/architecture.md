@@ -131,11 +131,21 @@ interface Project {
 - stepError lets the UI show why a step failed, not just that it did
 - The two chain id fields are separate because the pipeline runs two independent Gemini interaction chains, a text chain and an image chain, and losing track of either one breaks resumability for that chain specifically.
 
+## Concurrency: reading project
+``` typescript
+async function readFile(userEmail: string, projectId: string): Promise<Project> {
+  const path = `/data/users/${userEmail}/projects/${projectId}.json`;
+  const raw = await fs.readFile(path, 'utf-8');
+  return JSON.parse(raw) as Project;
+}
+```
+- readFile takes userEmail as well as projectId, since the file path is scoped under the owning user's folder.
+
 ## Conurrency: write lock
 ``` typescript
 const writeLocks = new Map<string, Promise<unknown>>();
 
-async function withProjectLock<T>(projectId: string, fn: () => Promise<T>): Promise<T> {
+async function withLock<T>(projectId: string, fn: () => Promise<T>): Promise<T> {
   const previous = writeLocks.get(projectId) ?? Promise.resolve();
   const current = previous.then(fn, fn);
   writeLocks.set(projectId, current.catch(() => {}));
@@ -145,7 +155,7 @@ async function withProjectLock<T>(projectId: string, fn: () => Promise<T>): Prom
 
 ## Concurrency: atomic write
 ``` typescript
-async function writeProjectFile(project: Project): Promise<void> {
+async function writeFile(project: Project): Promise<void> {
   const finalPath = `/data/users/${project.userEmail}/projects/${project.id}.json`;
   const tempPath = `${finalPath}.tmp`;
   await fs.writeFile(tempPath, JSON.stringify(project, null, 2));
