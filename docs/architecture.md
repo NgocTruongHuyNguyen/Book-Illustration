@@ -4,11 +4,14 @@ Co-author: claude
 Backend: TypeScript + Express. Frontend: TypeScript + React. Storage: JSON files on disk, one file per project. No database. See docs/plan.md for the Gemini pipeline mechanics this architecture supports.
 
 ## System Diagram
+```
 [User] <-> [React frontend] <-> [Express backend] <-> [Gemini API]
                                         |
                                 [/data on local disk]
+```
 
 ## Project structure
+```
 book-illustration-studio/
 ├── backend/
 │   ├── src/
@@ -47,6 +50,8 @@ book-illustration-studio/
 ├── package.json          # root — npm workspaces (shared, backend, frontend)
 └── .gitignore
 
+```
+
 - This is a plan so the actual folders may change once the coding sarts but the separation (routes / services / gemini / storage / types on the backend; pages / components / api on the frontend, shared types at the root) is the intended shape
 
 - shared/types holds the Project, Character, Chapter, ProjectStatus, and StepState types from the "Project state shape" section below. Both backend and frontend import from it directly, so the API response shape and the frontend's expectations can never quietly drift apart. This is set up as an npm workspace (a root package.json with a workspaces field listing shared, backend, frontend), rather than manual TypeScript path aliases in each project
@@ -58,6 +63,7 @@ book-illustration-studio/
 - Normalisation happens once, at the API boundary (sign-in, project creation), before the email is used anywhere downstream.
 
 ## File layout
+```
 /data/
   users/
     {normalised-email}/
@@ -69,10 +75,12 @@ book-illustration-studio/
       chapter-{index}.png
   books/
     {projectId}.txt
+```
 
 - One JSON file per project. Images and book text are separate files on disk, served through backend API routes
 
 ## Project state shape
+``` typescript
 
 type StepKey = 'STYLE' | 'CHARACTERS' | 'PORTRAITS' | 'CHAPTERS' | 'ILLUSTRATIONS';
 
@@ -117,13 +125,14 @@ interface Project {
   characters: Character[];
   chapters: Chapter[];
 }
+```
 
 - stepStartedAt is what makes stranded-step detection possible after a server crash.
 - stepError lets the UI show why a step failed, not just that it did
 - The two chain id fields are separate because the pipeline runs two independent Gemini interaction chains, a text chain and an image chain, and losing track of either one breaks resumability for that chain specifically.
 
 ## Conurrency: write lock
-
+``` typescript
 const writeLocks = new Map<string, Promise<unknown>>();
 
 async function withProjectLock<T>(projectId: string, fn: () => Promise<T>): Promise<T> {
@@ -132,20 +141,21 @@ async function withProjectLock<T>(projectId: string, fn: () => Promise<T>): Prom
   writeLocks.set(projectId, current.catch(() => {}));
   return current;
 }
+```
 
 ## Concurrency: atomic write
-
+``` typescript
 async function writeProjectFile(project: Project): Promise<void> {
   const finalPath = `/data/users/${project.userEmail}/projects/${project.id}.json`;
   const tempPath = `${finalPath}.tmp`;
   await fs.writeFile(tempPath, JSON.stringify(project, null, 2));
   await fs.rename(tempPath, finalPath);
 }
-
+```
 - Every write goes to a temp file first, then gets renamed into place. Rename on the same filesystem is atomic, so a crash mid-write never leaves a half-written JSON file on disk.
 
 ## No duplicate Gemini calls
-
+``` typescript
 async function runStep(projectId: string, stepKey: StepKey): Promise<void> {
   const alreadyRunning = await withProjectLock(projectId, async () => {
     const project = await readProjectFile(projectId);
@@ -167,7 +177,7 @@ async function runStep(projectId: string, stepKey: StepKey): Promise<void> {
   // does not block reads/writes to this project for its full duration.
   // A second locked write records the result or the failure afterward.
 }
-
+```
 - The step state is written as RUNNING before the Gemini call is made, not after. This ordering is what makes a refresh, a second tab, or a double-click safe, because the lock check happens before the network call starts, not around it.
 
 ## Stuck-step recovery
