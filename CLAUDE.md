@@ -67,7 +67,7 @@ These are pass/fail correctness rules from the assessment spec, not style prefer
 - When proposing a solution, flag trade-offs explicitly rather than silently picking the more complex option. Decisions and their costs get recorded in DECISIONS.md
 
 # Commands
-
+- `npm test` (from backend/) — runs backend tests via Vitest
 # Code style
 
 Co-author: claude.ai
