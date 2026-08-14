@@ -1,4 +1,3 @@
-// backend/src/services/steps.test.ts
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import type { Project } from '@book-studio/shared';
 import { STEP_DEFINITIONS } from './steps.js';
@@ -36,6 +35,7 @@ function makeProject(overrides: Partial<Project> = {}): Project {
 
 const charactersStep = STEP_DEFINITIONS.find((s) => s.key === 'CHARACTERS')!;
 const portraitsStep = STEP_DEFINITIONS.find((s) => s.key === 'PORTRAITS')!;
+const chaptersStep = STEP_DEFINITIONS.find((s) => s.key === 'CHAPTERS')!;
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -258,5 +258,111 @@ describe('PORTRAITS step', () => {
   it('throws if the project has no characters to generate portraits for', async () => {
     const project = makeProject({ status: 'CHARACTERS_GENERATED', characters: [] });
     await expect(portraitsStep.run(project)).rejects.toThrow('no characters');
+  });
+});
+
+describe('CHAPTERS step', () => {
+  it('caps chapters at 1, even when Gemini returns more', async () => {
+    vi.mocked(geminiClient.createInteraction).mockResolvedValue({
+      id: 'chapters-interaction-id',
+      status: 'completed',
+      model: 'gemini-3.6-flash',
+      steps: [],
+    });
+    vi.mocked(geminiClient.extractJSON).mockReturnValue([
+      { name: 'Chapter I: The River Bank', prompt: 'a scene at the river bank, described in detail' },
+      { name: 'Chapter II: The Open Road', prompt: 'a scene on the open road, described in detail' },
+      { name: 'Chapter III: The Wild Wood', prompt: 'a scene in the wild wood, described in detail' },
+    ]);
+
+    const project = makeProject({ status: 'PORTRAITS_GENERATED' });
+    const result = await chaptersStep.run(project);
+
+    expect(result.chapters).toHaveLength(1);
+    expect(result.chapters?.[0]?.name).toBe('Chapter I: The River Bank');
+  });
+
+  it('keeps the single chapter when Gemini returns exactly one', async () => {
+    vi.mocked(geminiClient.createInteraction).mockResolvedValue({
+      id: 'chapters-interaction-id',
+      status: 'completed',
+      model: 'gemini-3.6-flash',
+      steps: [],
+    });
+    vi.mocked(geminiClient.extractJSON).mockReturnValue([
+      { name: 'Only Chapter', prompt: 'the only chapter prompt, described in detail here' },
+    ]);
+
+    const project = makeProject({ status: 'PORTRAITS_GENERATED' });
+    const result = await chaptersStep.run(project);
+
+    expect(result.chapters).toHaveLength(1);
+  });
+
+  it('sets illustrationPath to null — nothing generated yet', async () => {
+    vi.mocked(geminiClient.createInteraction).mockResolvedValue({
+      id: 'x',
+      status: 'completed',
+      model: 'gemini-3.6-flash',
+      steps: [],
+    });
+    vi.mocked(geminiClient.extractJSON).mockReturnValue([
+      { name: 'A Chapter', prompt: 'description padded out to be long enough for this test' },
+    ]);
+
+    const project = makeProject({ status: 'PORTRAITS_GENERATED' });
+    const result = await chaptersStep.run(project);
+
+    expect(result.chapters?.[0]?.illustrationPath).toBeNull();
+  });
+
+  it("chains off the project's current textChainLastId (the CHARACTERS interaction) and updates it", async () => {
+    vi.mocked(geminiClient.createInteraction).mockResolvedValue({
+      id: 'brand-new-chapters-interaction-id',
+      status: 'completed',
+      model: 'gemini-3.6-flash',
+      steps: [],
+    });
+    vi.mocked(geminiClient.extractJSON).mockReturnValue([
+      { name: 'A Chapter', prompt: 'description padded out to be long enough for this test' },
+    ]);
+
+    const project = makeProject({
+      status: 'PORTRAITS_GENERATED',
+      textChainLastId: 'characters-interaction-id',
+    });
+    const result = await chaptersStep.run(project);
+
+    expect(geminiClient.createInteraction).toHaveBeenCalledWith(
+      expect.objectContaining({ previousInteractionId: 'characters-interaction-id' })
+    );
+    expect(result.textChainLastId).toBe('brand-new-chapters-interaction-id');
+  });
+
+  it('requests structured JSON output with the expected schema shape', async () => {
+    vi.mocked(geminiClient.createInteraction).mockResolvedValue({
+      id: 'x',
+      status: 'completed',
+      model: 'gemini-3.6-flash',
+      steps: [],
+    });
+    vi.mocked(geminiClient.extractJSON).mockReturnValue([]);
+
+    const project = makeProject({ status: 'PORTRAITS_GENERATED' });
+    await chaptersStep.run(project);
+
+    expect(geminiClient.createInteraction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        responseFormat: expect.objectContaining({
+          mime_type: 'application/json',
+          schema: expect.objectContaining({ type: 'array' }),
+        }),
+      })
+    );
+  });
+
+  it('throws a clear error if the project has no text chain to continue from', async () => {
+    const project = makeProject({ status: 'PORTRAITS_GENERATED', textChainLastId: null });
+    await expect(chaptersStep.run(project)).rejects.toThrow('text chain');
   });
 });
