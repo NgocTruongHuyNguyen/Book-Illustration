@@ -4,6 +4,7 @@ import { listProjects } from '../storage/listProject.js';
 import { readFile } from '../storage/readFile.js';
 import { runStep, retryStuckStep } from '../services/pipipelineService.js';
 import { NoNextStepError, StepNotStuckError } from '../services/pipelineErrors.js';
+import { readBookText } from '../storage/bookStorage.js';
 
 export const projectsRouter = Router();
 
@@ -77,5 +78,15 @@ projectsRouter.post('/:id/steps/retry', async (req, res) => {
     }
     console.error('retry stuck step failed', err);
     res.status(500).json({ error: 'Something went wrong retrying this step.' });
+  }
+});
+
+projectsRouter.get('/:id/book-text', async (req, res) => {
+  try {
+    const project = await readFile(req.userEmail!, req.params.id);
+    const text = await readBookText(project.bookTextPath);
+    res.status(200).type('text/plain').send(text);
+  } catch (err) {
+    res.status(404).json({ error: 'Project or book text not found.' });
   }
 });
