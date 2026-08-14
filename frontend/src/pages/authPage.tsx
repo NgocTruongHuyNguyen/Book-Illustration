@@ -10,7 +10,6 @@ export function AuthPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Already signed in — no need to show the form again.
   if (getCurrentUserEmail()) {
     navigate('/projects', { replace: true });
     return null;
@@ -41,38 +40,46 @@ export function AuthPage() {
   }
 
   return (
-    <div>
-      <h1>Book Illustration Studio</h1>
-      <p>Enter your details to start or resume an illustration project.</p>
-      <form onSubmit={handleSubmit}>
-        <div>
-          <label htmlFor="name">Full name</label>
-          <input
-            id="name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Mira Hassan"
-          />
-        </div>
-        <div>
-          <label htmlFor="email">Email</label>
-          <input
-            id="email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="mira@example.com"
-          />
-        </div>
-        {error && <p role="alert">{error}</p>}
-        <button type="submit" disabled={submitting}>
-          {submitting ? 'Continuing…' : 'Continue →'}
-        </button>
-      </form>
-      <p>
-        No password — this is a lightweight identity check. Using an email that
-        already has projects resumes them exactly where you left off.
-      </p>
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <div className="card" style={{ width: '100%', maxWidth: 420, padding: '40px 32px' }}>
+        <h1 style={{ textAlign: 'center', fontSize: 22, marginBottom: 4 }}>Book Illustration Studio</h1>
+        <p className="meta" style={{ textAlign: 'center' }}>
+          Enter your details to start or resume an illustration project.
+        </p>
+
+        <form onSubmit={handleSubmit}>
+          <div className="field">
+            <label htmlFor="name">Full name</label>
+            <input
+              id="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Mira Hassan"
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="email">Email</label>
+            <input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="mira@example.com"
+            />
+          </div>
+
+          {error && <p className="error-text" role="alert">{error}</p>}
+
+          <button type="submit" className="btn" disabled={submitting} style={{ width: '100%', justifyContent: 'center' }}>
+            {submitting ? 'Continuing…' : 'Continue →'}
+          </button>
+        </form>
+
+        <p className="meta" style={{ textAlign: 'center', marginTop: 20, marginBottom: 0 }}>
+          No password — this is a lightweight identity check. Using an email that
+          already has projects resumes them exactly where you left off.
+        </p>
+      </div>
     </div>
   );
 }
