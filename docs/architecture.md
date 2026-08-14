@@ -139,7 +139,7 @@ async function readFile(userEmail: string, projectId: string): Promise<Project> 
   return JSON.parse(raw) as Project;
 }
 ```
-- readFile takes userEmail as well as projectId, since the file path is scoped under the owning user's folder.
+- readFile takes userEmail as well as projectId, since the file path is scoped under the owning user's folder.yea
 
 ## Conurrency: write lock
 ``` typescript
