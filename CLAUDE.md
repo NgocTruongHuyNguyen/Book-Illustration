@@ -68,6 +68,7 @@ These are pass/fail correctness rules from the assessment spec, not style prefer
 
 # Commands
 - `npm test` (from backend/) — runs backend tests via Vitest
+- `npm run dev` (from backend/) — starts the backend
 # Code style
 
 Co-author: claude.ai
