@@ -1,35 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { Project, ProjectStatus } from '@book-studio/shared';
+import type { Project } from '@book-studio/shared';
 import { listProjects, ApiError } from '../api/client.js';
 import { clearCurrentUserEmail } from '../api/authStore.js';
-
-const STEP_LABELS = ['Style', 'Characters', 'Portraits', 'Chapters', 'Illustrations'];
-const STATUS_ORDER: ProjectStatus[] = [
-  'CREATED',
-  'STYLE_SET',
-  'CHARACTERS_GENERATED',
-  'PORTRAITS_GENERATED',
-  'CHAPTERS_GENERATED',
-  'DONE',
-];
-
-function statusIndex(status: ProjectStatus): number {
-  return STATUS_ORDER.indexOf(status);
-}
-
-function pillLabel(status: ProjectStatus): string {
-  if (status === 'DONE') return 'Done';
-  if (status === 'CREATED') return 'Draft';
-  return 'In progress';
-}
-
-function subtitle(status: ProjectStatus): string {
-  if (status === 'CREATED') return 'Book text saved · style not yet generated';
-  if (status === 'DONE') return 'All 5 steps complete';
-  const idx = statusIndex(status);
-  return STEP_LABELS.slice(0, idx).join(' + ') + ' done';
-}
+import { STEP_LABELS, statusIndex, pillLabel, subtitle } from '../lib/pipeline.js';
 
 export function ProjectListPage() {
   const navigate = useNavigate();
@@ -57,86 +31,53 @@ export function ProjectListPage() {
   }
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <div className="page">
+      <div className="topbar">
         <h1>Your projects</h1>
-        <div>
-          <button onClick={() => navigate('/projects/new')}>+ New project</button>
-          <button onClick={signOut}>Sign out</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn" onClick={() => navigate('/projects/new')}>+ New project</button>
+          <button className="btn-secondary btn" onClick={signOut}>Sign out</button>
         </div>
       </div>
 
-      {error && <p role="alert">{error}</p>}
-
-      {!error && projects === null && <p>Loading your projects…</p>}
+      {error && <p className="error-text" role="alert">{error}</p>}
+      {!error && projects === null && <p className="meta">Loading your projects…</p>}
 
       {projects !== null && projects.length === 0 && (
-        <div>
-          <p>No projects yet.</p>
-          <button onClick={() => navigate('/projects/new')}>+ New project</button>
+        <div className="empty-state">
+          <p style={{ marginBottom: 16 }}>No projects yet.</p>
+          <button className="btn" onClick={() => navigate('/projects/new')}>+ New project</button>
         </div>
       )}
 
       {projects !== null && projects.length > 0 && (
-        <ul style={{ listStyle: 'none', padding: 0 }}>
+        <div>
           {projects.map((p) => {
             const idx = statusIndex(p.status);
+            const pillClass = p.status === 'DONE' ? 'done' : p.status === 'CREATED' ? 'draft' : 'progress';
             return (
-              <li
+              <div
                 key={p.id}
+                className="project-row"
                 tabIndex={0}
                 role="button"
                 onClick={() => navigate(`/projects/${p.id}`)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') navigate(`/projects/${p.id}`);
-                }}
-                style={{
-                  border: '1px solid #ddd',
-                  borderRadius: 8,
-                  padding: 16,
-                  marginBottom: 8,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 16,
-                }}
+                onKeyDown={(e) => { if (e.key === 'Enter') navigate(`/projects/${p.id}`); }}
               >
-                <div style={{ flex: 1 }}>
+                <div className="title">
                   <strong>{p.title}</strong>
-                  <div style={{ fontSize: 12, color: '#666' }}>
-                    Created {new Date(p.createdAt).toLocaleDateString()} · {subtitle(p.status)}
-                  </div>
+                  <span className="subtitle">Created {new Date(p.createdAt).toLocaleDateString()} · {subtitle(p.status)}</span>
                 </div>
-                <div style={{ display: 'flex', gap: 4 }} aria-label="Progress">
+                <div className="progress-mini" aria-label="Progress">
                   {STEP_LABELS.map((_, i) => (
-                    <span
-                      key={i}
-                      style={{
-                        width: 18,
-                        height: 4,
-                        borderRadius: 2,
-                        background: i < idx ? '#FF6B00' : '#ddd',
-                        display: 'inline-block',
-                      }}
-                    />
+                    <span key={i} className={`seg ${i < idx ? 'on' : ''}`} />
                   ))}
                 </div>
-                <span
-                  style={{
-                    padding: '4px 12px',
-                    borderRadius: 999,
-                    fontSize: 12,
-                    fontWeight: 700,
-                    color: '#fff',
-                    background: p.status === 'DONE' ? '#231F20' : p.status === 'CREATED' ? '#919699' : '#FF6B00',
-                  }}
-                >
-                  {pillLabel(p.status)}
-                </span>
-              </li>
+                <span className={`pill ${pillClass}`}>{pillLabel(p.status)}</span>
+              </div>
             );
           })}
-        </ul>
+        </div>
       )}
     </div>
   );
