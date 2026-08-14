@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import type { Project } from '@book-studio/shared';
-import { getProject, runStep, retryStep, ApiError } from '../api/client.js';
+import { getProject, runStep, retryStep, getBookText, ApiError } from '../api/client.js';
 import {
   STEP_LABELS,
   statusIndex,
   getCurrentStepKey,
   isStepStale,
   STEP_CAPTIONS,
+  imageUrl,
 } from '../lib/pipeline.js';
 
 const POLL_INTERVAL_MS = 3000;
@@ -45,7 +46,7 @@ export function ProjectDetailPage() {
 
   useEffect(() => {
     refresh();
-
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   useEffect(() => {
@@ -54,6 +55,7 @@ export function ProjectDetailPage() {
       pollRef.current = setInterval(refresh, POLL_INTERVAL_MS);
     }
     return stopPolling;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project?.stepState, project?.stepStartedAt]);
 
   async function handleRunStep() {
@@ -113,16 +115,17 @@ export function ProjectDetailPage() {
   const running = project.stepState === 'RUNNING' && !stale;
   const failed = project.stepState === 'FAILED';
 
-  const bookSnippet = project.style
-    ? null
-    : project.bookTextPath 
-    ;
+  // While Portraits/Illustrations run, the relevant grid shows spinners on
+  // items that don't have an image path yet — matches the demo's per-item reveal.
+  const portraitsRunning = running && currentKey === 'PORTRAITS';
+  const illustrationsRunning = running && currentKey === 'ILLUSTRATIONS';
 
   return (
     <div className="page">
       <button className="btn-link" onClick={() => navigate('/projects')}>← Back to projects</button>
       <h1>{project.title}</h1>
       <p className="meta">Created {new Date(project.createdAt).toLocaleDateString()}</p>
+
       <div className="stepper">
         {STEP_LABELS.map((label, i) => {
           const done = i < idx;
@@ -141,7 +144,6 @@ export function ProjectDetailPage() {
 
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 32, alignItems: 'start' }}>
         <div>
-          {/* Main action panel */}
           {!currentKey ? (
             <div className="card">
               <div className="status-line" style={{ color: 'var(--ink)' }}>
@@ -205,6 +207,56 @@ export function ProjectDetailPage() {
             </div>
           )}
 
+          {/* Chapters render above Characters, newest-first, matching the demo */}
+          {project.chapters.length > 0 && (
+            <div style={{ marginTop: 28 }}>
+              <h3 style={{ fontSize: 16, marginBottom: 12 }}>Chapters ({project.chapters.length})</h3>
+              <div className="entity-grid">
+                {project.chapters.map((c) => (
+                  <div key={c.name} className="entity-card">
+                    <div className="art">
+                      {c.illustrationPath ? (
+                        <img src={imageUrl(project.id, c.illustrationPath)} alt={c.name} />
+                      ) : illustrationsRunning ? (
+                        <span className="spinner" />
+                      ) : (
+                        <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>Not generated yet</span>
+                      )}
+                    </div>
+                    <div className="body">
+                      <h5>{c.name}</h5>
+                      <p>{c.prompt}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {project.characters.length > 0 && (
+            <div style={{ marginTop: 28 }}>
+              <h3 style={{ fontSize: 16, marginBottom: 12 }}>Characters ({project.characters.length})</h3>
+              <div className="entity-grid">
+                {project.characters.map((c) => (
+                  <div key={c.name} className="entity-card">
+                    <div className="art">
+                      {c.portraitPath ? (
+                        <img src={imageUrl(project.id, c.portraitPath)} alt={c.name} />
+                      ) : portraitsRunning ? (
+                        <span className="spinner" />
+                      ) : (
+                        <span style={{ fontSize: 11, color: 'var(--ink-3)' }}>Not generated yet</span>
+                      )}
+                    </div>
+                    <div className="body">
+                      <h5>{c.name}</h5>
+                      <p>{c.prompt}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="card">
@@ -219,11 +271,11 @@ export function ProjectDetailPage() {
               <p style={{ fontSize: 13, fontStyle: 'italic', margin: 0 }}>
                 Saved and ready — style hasn't been generated yet.
               </p>
-              <button className="btn-link" style={{ marginTop: 8, marginBottom: 0 }} onClick={() => setShowBookModal(true)}>
-                Read full text →
-              </button>
             </>
           )}
+          <button className="btn-link" style={{ marginTop: 8, marginBottom: 0 }} onClick={() => setShowBookModal(true)}>
+            Read full text →
+          </button>
         </div>
       </div>
 
@@ -235,6 +287,15 @@ export function ProjectDetailPage() {
 }
 
 function BookTextModal({ projectId, onClose }: { projectId: string; onClose: () => void }) {
+  const [text, setText] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getBookText(projectId)
+      .then(setText)
+      .catch(() => setError('Failed to load book text.'));
+  }, [projectId]);
+
   return (
     <div
       style={{
@@ -248,10 +309,9 @@ function BookTextModal({ projectId, onClose }: { projectId: string; onClose: () 
           <h4 style={{ margin: 0 }}>Full book text</h4>
           <button className="btn-link" style={{ margin: 0 }} onClick={onClose}>✕</button>
         </div>
-        <p className="meta">
-          Book text viewing for project {projectId} needs a backend route (e.g. GET
-          /projects/:id/book-text) to serve the saved file — not implemented yet.
-        </p>
+        {error && <p className="error-text" role="alert">{error}</p>}
+        {!error && text === null && <p className="meta">Loading…</p>}
+        {text !== null && <p style={{ fontSize: 14, lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>{text}</p>}
       </div>
     </div>
   );
