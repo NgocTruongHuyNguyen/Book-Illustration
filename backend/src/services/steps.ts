@@ -1,6 +1,7 @@
-import type { Project, ProjectStatus, StepKey } from '@book-studio/shared';
-import { createInteraction, extractText } from '../gemini/geminiClient.js';
+import type { Project, ProjectStatus, StepKey, Character } from '@book-studio/shared';
+import { createInteraction, extractText, extractJSON } from '../gemini/geminiClient.js';
 import { TEXT_MODEL } from '../gemini/config.js';
+import { MAX_CHARACTERS } from './caps.js';
 
 export interface StepOptions {
   userStyle?: string;
@@ -16,6 +17,22 @@ export interface StepDefinition {
 async function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+const CHARACTER_PROMPT_SCHEMA = {
+  type: 'array',
+  items: {
+    type: 'object',
+    properties: {
+      name: { type: 'string' },
+      prompt: { type: 'string' },
+    },
+    required: ['name', 'prompt'],
+  },
+} as const;
+
+interface CharacterPromptResult {
+  name: string;
+  prompt: string;
+}
 
 export const STEP_DEFINITIONS: StepDefinition[] = [
   {
@@ -24,7 +41,7 @@ export const STEP_DEFINITIONS: StepDefinition[] = [
     toStatus: 'STYLE_SET',
     async run(project, options) {
       if (!project.textChainLastId) {
-        throw new Error('Project has no text chain to continue from (book upload may have failed.');
+        throw new Error('Project has no text chain to continue from — book upload may have failed.');
       }
 
       const userStyle = options?.userStyle?.trim();
@@ -43,7 +60,7 @@ export const STEP_DEFINITIONS: StepDefinition[] = [
 
       return {
         style: `Follow this style: "${style}"`,
-        textChainLastId: interaction.id, // Characters chains off this next
+        textChainLastId: interaction.id,
       };
     },
   },
@@ -51,13 +68,37 @@ export const STEP_DEFINITIONS: StepDefinition[] = [
     key: 'CHARACTERS',
     fromStatus: 'STYLE_SET',
     toStatus: 'CHARACTERS_GENERATED',
-    async run() {
-      await delay(50);
+    async run(project) {
+      if (!project.textChainLastId) {
+        throw new Error('Project has no text chain to continue from — style step may not have completed.');
+      }
+
+      const interaction = await createInteraction({
+        model: TEXT_MODEL,
+        input:
+          'Can you describe the main characters (only the adults) and prepare a prompt ' +
+          "describing them with as much detail as possible (use the descriptions from the book) " +
+          'so Nano Banana can generate images of them? Each prompt should be at least 50 words.',
+        previousInteractionId: project.textChainLastId,
+        responseFormat: {
+          type: 'text',
+          mime_type: 'application/json',
+          schema: CHARACTER_PROMPT_SCHEMA,
+        },
+      });
+
+      const rawCharacters = extractJSON<CharacterPromptResult[]>(interaction);
+      const capped = rawCharacters.slice(0, MAX_CHARACTERS);
+
+      const characters: Character[] = capped.map((c) => ({
+        name: c.name,
+        prompt: c.prompt,
+        portraitPath: null,
+      }));
+
       return {
-        characters: [
-          { name: 'Mock Character A', prompt: 'placeholder prompt', portraitPath: null },
-          { name: 'Mock Character B', prompt: 'placeholder prompt', portraitPath: null },
-        ],
+        characters,
+        textChainLastId: interaction.id,
       };
     },
   },

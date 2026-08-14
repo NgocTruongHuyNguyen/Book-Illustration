@@ -125,3 +125,12 @@ export function extractImage(interaction: InteractionResponse): { data: string; 
   }
   throw new Error('No image content found in interaction response.');
 }
+
+export function extractJSON<T>(interaction: InteractionResponse): T {
+  const text = extractText(interaction);
+  try {
+    return JSON.parse(text) as T;
+  } catch (err) {
+    throw new Error(`Gemini structured output was not valid JSON: ${text}`);
+  }
+}
