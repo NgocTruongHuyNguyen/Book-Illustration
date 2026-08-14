@@ -84,4 +84,6 @@ the previously generated characters following this description:
 {chapter prompt}`, no image data is re-attached, consistency relies entirely on the model's memory within the chained conversation
 - Output: Image extracted the same way as portraits, walk interaction.steps in reverse model_output step with image content, base64 + mime type
 
+## Rest Mapping
+Confirmed via direct REST test in Colab: A real interaction was created successfully, and a second call using previous_interaction_id correctly recalled the first call's content without it being re-sent (verifying both the endpoint and the chaining mechanism work as documented).
 
