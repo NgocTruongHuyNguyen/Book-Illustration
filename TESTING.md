@@ -41,8 +41,6 @@ Frontend gets targeted coverage on `lib/pipeline.ts`, the pure-function status m
 - `pipeline.test.ts` — status-to-step-index math, which step key is "current" for every status in the pipeline (including `null` once DONE), pill labels and subtitle text at each stage, and the stale-step timeout boundary (false when IDLE, false when RUNNING within the window, true once past it).
 
 ### Test report
-huynguyenngoctruong@Huys-MacBook-Pro frontend % npm test
-
  ✓ src/lib/pipeline.test.ts (17 tests) 4ms
    ✓ statusIndex (3)
      ✓ returns 0 for CREATED — no steps done yet 1ms
