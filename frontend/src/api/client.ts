@@ -73,3 +73,13 @@ export function runStep(id: string, style?: string): Promise<RunStepResponse> {
 export function retryStep(id: string): Promise<{ project: Project }> {
   return request(`/projects/${id}/steps/retry`, { method: 'POST' });
 }
+
+export async function getBookText(id: string): Promise<string> {
+  const email = getCurrentUserEmail();
+  if (!email) throw new ApiError(401, 'Not signed in.');
+  const response = await fetch(`${API_BASE_URL}/projects/${id}/book-text`, {
+    headers: { 'x-user-email': email },
+  });
+  if (!response.ok) throw new ApiError(response.status, 'Failed to load book text.');
+  return response.text();
+}
