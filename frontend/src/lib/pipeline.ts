@@ -1,6 +1,8 @@
-import type { ProjectStatus } from '@book-studio/shared';
+import type { ProjectStatus, StepKey } from '@book-studio/shared';
 
 export const STEP_LABELS = ['Style', 'Characters', 'Portraits', 'Chapters', 'Illustrations'];
+
+export const STEP_KEYS: StepKey[] = ['STYLE', 'CHARACTERS', 'PORTRAITS', 'CHAPTERS', 'ILLUSTRATIONS'];
 
 export const STATUS_ORDER: ProjectStatus[] = [
   'CREATED',
@@ -13,6 +15,10 @@ export const STATUS_ORDER: ProjectStatus[] = [
 
 export function statusIndex(status: ProjectStatus): number {
   return STATUS_ORDER.indexOf(status);
+}
+export function getCurrentStepKey(status: ProjectStatus): StepKey | null {
+  const idx = statusIndex(status);
+  return STEP_KEYS[idx] ?? null;
 }
 
 export function pillLabel(status: ProjectStatus): string {
@@ -27,6 +33,14 @@ export function subtitle(status: ProjectStatus): string {
   const idx = statusIndex(status);
   return STEP_LABELS.slice(0, idx).join(' + ') + ' done';
 }
+
+export const STEP_CAPTIONS: Record<StepKey, string> = {
+  STYLE: 'Reading your book text and defining an art style',
+  CHARACTERS: "Generating the character list from your book's text",
+  PORTRAITS: 'Generating character portraits',
+  CHAPTERS: 'Generating a chapter illustration prompt',
+  ILLUSTRATIONS: 'Generating the chapter illustration',
+};
 
 // Must match backend/src/services/pipipelineService.ts STUCK_STEP_TIMEOUT_MS
 export const STUCK_STEP_TIMEOUT_MS = 3 * 60 * 1000;
