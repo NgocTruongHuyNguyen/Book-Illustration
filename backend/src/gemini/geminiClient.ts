@@ -100,9 +100,10 @@ export async function uploadFile(filePath: string, mimeType: string): Promise<Ge
   };
 }
 
+
 export async function createInteraction(params: CreateInteractionParams): Promise<InteractionResponse> {
   const apiKey = getApiKey();
-
+ 
   const body: Record<string, unknown> = {
     model: params.model,
     input: params.input,
@@ -113,7 +114,13 @@ export async function createInteraction(params: CreateInteractionParams): Promis
   if (params.responseFormat) {
     body.response_format = params.responseFormat;
   }
-
+  if (params.responseModalities) {
+    body.response_modalities = params.responseModalities;
+  }
+  if (params.aspectRatio) {
+    body.aspect_ratio = params.aspectRatio;
+  }
+ 
   const response = await fetch(`${BASE_URL}/v1beta/interactions`, {
     method: 'POST',
     headers: {
@@ -122,14 +129,13 @@ export async function createInteraction(params: CreateInteractionParams): Promis
     },
     body: JSON.stringify(body),
   });
-
+ 
   if (!response.ok) {
     throw new Error(`Gemini interaction failed: ${response.status} ${await response.text()}`);
   }
-
+ 
   return (await response.json()) as InteractionResponse;
 }
-
 
 export function extractText(interaction: InteractionResponse): string {
   for (let i = interaction.steps.length - 1; i >= 0; i--) {

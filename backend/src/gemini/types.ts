@@ -35,4 +35,7 @@ export interface CreateInteractionParams {
   input: string | InteractionContentBlock[];
   previousInteractionId?: string;
   responseFormat?: ResponseFormat;
+  responseModalities?: string[]; 
+  aspectRatio?: string; // e.g. '9:16' for portraits
 }
+ 
