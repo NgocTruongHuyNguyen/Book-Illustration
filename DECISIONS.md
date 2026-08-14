@@ -28,3 +28,9 @@ getting messy once the routes had to handle step ordering, cap enforcement, and 
 
 # Cutting a backend-only types folder
 Claude had included an empty backend/src/types folder in the first architecture draft, for types that only the backend would need. I realise that after create shared/types, the types under backend folder is not neccesary anymore so I removed it. The backend  mports directly from shared/types like the frontend does, and I'll add a backend-only types file later only if a genuinely internal type actually appears,rather than pre-building structure for a need that  doesn't exist yet.
+
+# Header-based session instead of cookies
+The spec leaves session representation open. I chose a simple header (x-user-email) sent by the frontend on every request after sign-in, instead of a cookie-based session. Given no password or OAuth exists in this app at all, a cookie's main advantage, harder to spoof than a header a client sets itself, doesn't protect much here. The cost is real though: anyone who knows or guesses a user's email could set that header and act as them. I'm accepting that because the assessment explicitly allows no password and no OAuth, and building out real signed sessions would be time spent on a security property this project was never asked to have.
+
+# Email is sole identity
+Once a user signs in for the first time, their name is locked to what they entered then. I considered making a different name on re-signin create a new account, but that would mean keying storage on email plus name instead of email alone, which conflicts with the file layout already built and with the spec's own wording, email exists, load their projects, doesn't exist, create the user. I kept email as the sole identity. The cost is that a name typo or change on a later sign-in is silently ignored rather than updating anything, since there's no profile-editing feature in this project's scope.
