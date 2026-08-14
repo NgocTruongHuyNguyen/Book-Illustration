@@ -2,7 +2,7 @@ import type { Project } from '@book-studio/shared';
 import { readFile } from '../storage/readFile.js';
 import { writeFile } from '../storage/writeFile.js';
 import { withLock } from '../storage/withLock.js';
-import { getNextStep } from './steps.js';
+import { getNextStep, type StepOptions } from './steps.js';
 import { NoNextStepError, StepNotStuckError } from './pipelineErrors.js';
 
 export type RunStepResult =
@@ -10,19 +10,24 @@ export type RunStepResult =
   | { outcome: 'already-running'; project: Project };
 
 export const STUCK_STEP_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes
-export async function runStep(userEmail: string, projectId: string): Promise<RunStepResult> {
+
+export async function runStep(
+  userEmail: string,
+  projectId: string,
+  options?: StepOptions
+): Promise<RunStepResult> {
   const claim = await withLock(projectId, async () => {
     const project = await readFile(userEmail, projectId);
-
+ 
     if (project.stepState === 'RUNNING') {
       return { claimed: false as const, project };
     }
-
+ 
     const step = getNextStep(project.status);
     if (!step) {
       throw new NoNextStepError(projectId);
     }
-
+ 
     const updated: Project = {
       ...project,
       stepState: 'RUNNING',
@@ -32,19 +37,19 @@ export async function runStep(userEmail: string, projectId: string): Promise<Run
     await writeFile(updated);
     return { claimed: true as const, project: updated };
   });
-
+ 
   if (!claim.claimed) {
     return { outcome: 'already-running', project: claim.project };
   }
-
+ 
   const step = getNextStep(claim.project.status);
   if (!step) {
     throw new NoNextStepError(projectId);
   }
-
+ 
   try {
-    const resultFields = await step.run(claim.project);
-
+    const resultFields = await step.run(claim.project, options); // <-- options passed through here
+ 
     await withLock(projectId, async () => {
       const latest = await readFile(userEmail, projectId);
       const finished: Project = {
@@ -70,7 +75,7 @@ export async function runStep(userEmail: string, projectId: string): Promise<Run
     });
     throw err;
   }
-
+ 
   const finalProject = await readFile(userEmail, projectId);
   return { outcome: 'started', project: finalProject };
 }

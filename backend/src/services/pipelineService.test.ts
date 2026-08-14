@@ -9,6 +9,16 @@ import { runStep, retryStuckStep, isStepStale } from './pipipelineService.js';
 import { StepNotStuckError } from './pipelineErrors.js';
 import * as stepsModule from './steps.js';
 
+vi.mock('../gemini/geminiClient.js', () => ({
+  createInteraction: vi.fn().mockResolvedValue({
+    id: 'mock-interaction-id',
+    status: 'completed',
+    model: 'gemini-3.6-flash',
+    steps: [{ type: 'model_output', content: [{ type: 'text', text: 'Mocked style output' }] }],
+  }),
+  extractText: vi.fn().mockReturnValue('Mocked style output'),
+}));
+
 function makeProject(overrides: Partial<Project> = {}): Project {
   return {
     id: 'p1',
@@ -20,7 +30,7 @@ function makeProject(overrides: Partial<Project> = {}): Project {
     stepState: 'IDLE',
     stepStartedAt: null,
     stepError: null,
-    textChainLastId: null,
+    textChainLastId: 'mock-book-interaction-id',
     imageChainLastId: null,
     style: null,
     characters: [],
@@ -52,7 +62,23 @@ describe('runStep', () => {
     expect(result.outcome).toBe('started');
     expect(result.project.status).toBe('STYLE_SET');
     expect(result.project.stepState).toBe('IDLE');
-    expect(result.project.style).toBeTruthy();
+    expect(result.project.style).toContain('Mocked style output');
+  });
+
+  it('passes a user-supplied style through instead of asking Gemini to invent one', async () => {
+    const project = makeProject();
+    await writeFile(project);
+
+    const result = await runStep(project.userEmail, project.id, { userStyle: 'noir comic' });
+
+    expect(result.project.style).toContain('noir comic');
+  });
+
+  it('throws a clear error if the project has no text chain to continue from', async () => {
+    const project = makeProject({ textChainLastId: null });
+    await writeFile(project);
+
+    await expect(runStep(project.userEmail, project.id)).rejects.toThrow('text chain');
   });
 
   it('runs steps strictly in order — cannot skip to CHARACTERS before STYLE', async () => {
@@ -61,8 +87,6 @@ describe('runStep', () => {
 
     const result = await runStep(project.userEmail, project.id);
 
-    // whatever the mock STYLE step produces, status must be STYLE_SET next,
-    // never CHARACTERS_GENERATED or anything further along
     expect(result.project.status).toBe('STYLE_SET');
   });
 
@@ -77,7 +101,6 @@ describe('runStep', () => {
     const result = await runStep(project.userEmail, project.id);
 
     expect(result.outcome).toBe('already-running');
-    // status must be untouched — no step actually executed
     expect(result.project.status).toBe('CREATED');
   });
 
@@ -97,7 +120,7 @@ describe('runStep', () => {
     const afterFailure = await readFile(project.userEmail, project.id);
     expect(afterFailure.stepState).toBe('FAILED');
     expect(afterFailure.stepError).toBe('gemini exploded');
-    expect(afterFailure.status).toBe('CREATED'); // status did not advance
+    expect(afterFailure.status).toBe('CREATED');
 
     spy.mockRestore();
   });
@@ -109,10 +132,21 @@ describe('runStep', () => {
     });
     await writeFile(project);
 
+    const spy = vi.spyOn(stepsModule, 'getNextStep').mockReturnValue({
+      key: 'CHARACTERS',
+      fromStatus: 'STYLE_SET',
+      toStatus: 'CHARACTERS_GENERATED',
+      run: vi.fn().mockResolvedValue({
+        characters: [{ name: 'Mock', prompt: 'p', portraitPath: null }],
+      }),
+    });
+
     const result = await runStep(project.userEmail, project.id);
 
     expect(result.project.status).toBe('CHARACTERS_GENERATED');
     expect(result.project.style).toBe('already generated style'); // untouched
+
+    spy.mockRestore();
   });
 
   it('throws when there is no next step (project already DONE)', async () => {
@@ -128,7 +162,7 @@ describe('retryStuckStep', () => {
     const project = makeProject({
       status: 'CHARACTERS_GENERATED',
       stepState: 'RUNNING',
-      stepStartedAt: new Date(Date.now() - 999999).toISOString(), // well past the timeout
+      stepStartedAt: new Date(Date.now() - 999999).toISOString(),
       characters: [{ name: 'Existing', prompt: 'p', portraitPath: null }],
     });
     await writeFile(project);
@@ -137,8 +171,8 @@ describe('retryStuckStep', () => {
 
     expect(reset.stepState).toBe('IDLE');
     expect(reset.stepStartedAt).toBeNull();
-    expect(reset.status).toBe('CHARACTERS_GENERATED'); // unchanged
-    expect(reset.characters).toHaveLength(1); // unchanged
+    expect(reset.status).toBe('CHARACTERS_GENERATED');
+    expect(reset.characters).toHaveLength(1);
   });
 
   it('resets a FAILED step back to IDLE and clears the error', async () => {
@@ -168,7 +202,7 @@ describe('retryStuckStep', () => {
     const project = makeProject({
       status: 'STYLE_SET',
       stepState: 'RUNNING',
-      stepStartedAt: new Date().toISOString(), // just started, not stale
+      stepStartedAt: new Date().toISOString(),
     });
     await writeFile(project);
 

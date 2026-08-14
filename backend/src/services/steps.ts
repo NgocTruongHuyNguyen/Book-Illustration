@@ -1,14 +1,18 @@
 import type { Project, ProjectStatus, StepKey } from '@book-studio/shared';
+import { createInteraction, extractText } from '../gemini/geminiClient.js';
+import { TEXT_MODEL } from '../gemini/config.js';
+
+export interface StepOptions {
+  userStyle?: string;
+}
 
 export interface StepDefinition {
   key: StepKey;
   fromStatus: ProjectStatus;
   toStatus: ProjectStatus;
-  run(project: Project): Promise<Partial<Project>>;
+  run(project: Project, options?: StepOptions): Promise<Partial<Project>>;
 }
 
-
-// Each simulates a delay so the "no duplicate call while RUNNING" behavior is actually exercisable.
 async function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -18,9 +22,29 @@ export const STEP_DEFINITIONS: StepDefinition[] = [
     key: 'STYLE',
     fromStatus: 'CREATED',
     toStatus: 'STYLE_SET',
-    async run() {
-      await delay(50);
-      return { style: 'MOCK STYLE (replace with real Gemini call' };
+    async run(project, options) {
+      if (!project.textChainLastId) {
+        throw new Error('Project has no text chain to continue from (book upload may have failed.');
+      }
+
+      const userStyle = options?.userStyle?.trim();
+
+      const prompt = userStyle
+        ? `The art style will be: "${userStyle}". Keep that in mind when generating future prompts. Keep quiet for now, instructions will follow.`
+        : 'Can you define an art style that would fit the story but with a twist? Just give us the prompt for the art style that will be added to future prompts.';
+
+      const interaction = await createInteraction({
+        model: TEXT_MODEL,
+        input: prompt,
+        previousInteractionId: project.textChainLastId,
+      });
+
+      const style = userStyle ?? extractText(interaction);
+
+      return {
+        style: `Follow this style: "${style}"`,
+        textChainLastId: interaction.id, // Characters chains off this next
+      };
     },
   },
   {

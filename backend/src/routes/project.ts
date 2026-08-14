@@ -48,9 +48,13 @@ projectsRouter.get('/:id', async (req, res) => {
   }
 });
 
+
 projectsRouter.post('/:id/steps/run', async (req, res) => {
+  const { style } = req.body ?? {};
+  const options = typeof style === 'string' && style.trim() !== '' ? { userStyle: style } : undefined;
+ 
   try {
-    const result = await runStep(req.userEmail!, req.params.id);
+    const result = await runStep(req.userEmail!, req.params.id, options);
     res.status(200).json(result);
   } catch (err) {
     if (err instanceof NoNextStepError) {
