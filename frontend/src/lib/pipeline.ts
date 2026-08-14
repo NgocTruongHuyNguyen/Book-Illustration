@@ -1,4 +1,5 @@
 import type { ProjectStatus, StepKey } from '@book-studio/shared';
+import { API_BASE_URL } from '../api/config.js';
 
 export const STEP_LABELS = ['Style', 'Characters', 'Portraits', 'Chapters', 'Illustrations'];
 
@@ -48,4 +49,9 @@ export const STUCK_STEP_TIMEOUT_MS = 3 * 60 * 1000;
 export function isStepStale(stepState: string, stepStartedAt: string | null): boolean {
   if (stepState !== 'RUNNING' || !stepStartedAt) return false;
   return Date.now() - new Date(stepStartedAt).getTime() > STUCK_STEP_TIMEOUT_MS;
+}
+
+export function imageUrl(projectId: string, filePath: string): string {
+  const filename = filePath.split(/[/\\]/).pop();
+  return `${API_BASE_URL}/images/${projectId}/${filename}`;
 }
