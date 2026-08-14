@@ -45,9 +45,11 @@ export const STEP_DEFINITIONS: StepDefinition[] = [
       const userStyle = options?.userStyle?.trim();
 
       const prompt = userStyle
-        ? `The art style will be: "${userStyle}". Keep that in mind when generating future prompts. Keep quiet for now, instructions will follow.`
-        : 'Can you define an art style that would fit the story but with a twist? Just give us the prompt for the art style that will be added to future prompts.';
-
+      ? `The art style will be: "${userStyle}". Keep that in mind when generating future prompts. Keep quiet for now, instructions will follow.`
+      : 'Define an art style that would fit this story, with a small creative twist. ' +
+        'Respond with ONLY the style description itself, as a single plain-text paragraph ' +
+        'suitable for reuse inside an image-generation prompt. No markdown, no headers, no bullet ' +
+        'points, no meta-commentary, no questions back to me — just the style description.';
       const interaction = await createInteraction({
         model: TEXT_MODEL,
         input: prompt,
