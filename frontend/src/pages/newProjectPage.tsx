@@ -44,13 +44,13 @@ export function NewProjectPage() {
   }
 
   return (
-    <div style={{ maxWidth: 460 }}>
-      <button onClick={() => navigate('/projects')}>← Back to projects</button>
+    <div className="page narrow">
+      <button className="btn-link" onClick={() => navigate('/projects')}>← Back to projects</button>
       <h1>Start a new illustration project</h1>
-      <p>Give it a title, then paste the book's text or upload a .txt file.</p>
+      <p className="meta">Give it a title, then paste the book's text or upload a .txt file.</p>
 
       <form onSubmit={handleSubmit}>
-        <div>
+        <div className="field">
           <label htmlFor="title">Project title</label>
           <input
             id="title"
@@ -60,18 +60,9 @@ export function NewProjectPage() {
           />
         </div>
 
-        <div style={{ marginTop: 16 }}>
+        <div className="field">
           <label htmlFor="book-text">Book text</label>
-          <div
-            style={{
-              border: '1.5px dashed #ccc',
-              borderRadius: 8,
-              padding: 24,
-              textAlign: 'center',
-              cursor: 'pointer',
-            }}
-            onClick={() => document.getElementById('file-input')?.click()}
-          >
+          <div className="dropzone" onClick={() => document.getElementById('file-input')?.click()}>
             {fileName ? `✓ ${fileName} loaded` : 'Click to choose a .txt file'}
           </div>
           <input
@@ -81,13 +72,10 @@ export function NewProjectPage() {
             style={{ display: 'none' }}
             onChange={handleFile}
           />
-          <div style={{ margin: '12px 0', textAlign: 'center', color: '#888', fontSize: 12 }}>
-            or paste text
-          </div>
+          <div className="divider">or paste text</div>
           <textarea
             id="book-text"
             rows={6}
-            style={{ width: '100%' }}
             value={bookText}
             onChange={(e) => {
               setBookText(e.target.value);
@@ -97,9 +85,9 @@ export function NewProjectPage() {
           />
         </div>
 
-        {error && <p role="alert">{error}</p>}
+        {error && <p className="error-text" role="alert">{error}</p>}
 
-        <button type="submit" disabled={submitting} style={{ width: '100%', marginTop: 16 }}>
+        <button type="submit" className="btn" disabled={submitting} style={{ width: '100%', justifyContent: 'center' }}>
           {submitting ? 'Creating… this uploads the book and can take a moment' : 'Create project →'}
         </button>
       </form>
