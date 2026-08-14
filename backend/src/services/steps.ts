@@ -15,10 +15,6 @@ export interface StepDefinition {
   run(project: Project, options?: StepOptions): Promise<Partial<Project>>;
 }
 
-async function delay(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 const PROMPT_LIST_SCHEMA = {
   type: 'array',
   items: {
@@ -177,7 +173,6 @@ export const STEP_DEFINITIONS: StepDefinition[] = [
       });
 
       const rawChapters = extractJSON<PromptResult[]>(interaction);
-
       const capped = rawChapters.slice(0, MAX_CHAPTERS);
 
       const chapters: Chapter[] = capped.map((c) => ({
@@ -197,12 +192,50 @@ export const STEP_DEFINITIONS: StepDefinition[] = [
     fromStatus: 'CHAPTERS_GENERATED',
     toStatus: 'DONE',
     async run(project) {
-      await delay(50);
-      const chapters = project.chapters.map((c) => ({
-        ...c,
-        illustrationPath: `/mock/illustration-${c.name}.png`,
-      }));
-      return { chapters };
+      if (project.chapters.length === 0) {
+        throw new Error('Project has no chapters to generate illustrations for.');
+      }
+      if (!project.imageChainLastId) {
+        throw new Error('Project has no image chain to continue from — portraits step may not have completed.');
+      }
+
+      let lastImageInteractionId = (
+        await createInteraction({
+          model: IMAGE_MODEL,
+          input:
+            "Starting from now, we're going to illustrate the book's chapters. Don't forget to " +
+            'refer to your previous illustrations of the characters to keep the characters ' +
+            'consistent, but feel free to change their position.',
+          previousInteractionId: project.imageChainLastId,
+        })
+      ).id;
+
+      const updatedChapters: Chapter[] = [];
+
+      for (const chapter of project.chapters) {
+        const interaction = await createInteraction({
+          model: IMAGE_MODEL,
+          input: `Create an illustration for ${chapter.name} using the previously generated characters following this description: ${chapter.prompt}`,
+          previousInteractionId: lastImageInteractionId,
+          responseModalities: ['Image'],
+        });
+
+        const image = extractImage(interaction);
+        const illustrationPath = await writeImage(
+          project.id,
+          `illustration-${chapter.name.replace(/\s+/g, '-').toLowerCase()}`,
+          image.data,
+          image.mimeType
+        );
+
+        updatedChapters.push({ ...chapter, illustrationPath });
+        lastImageInteractionId = interaction.id;
+      }
+
+      return {
+        chapters: updatedChapters,
+        imageChainLastId: lastImageInteractionId,
+      };
     },
   },
 ];
