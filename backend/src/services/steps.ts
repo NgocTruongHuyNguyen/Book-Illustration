@@ -1,7 +1,7 @@
-import type { Project, ProjectStatus, StepKey, Character } from '@book-studio/shared';
+import type { Project, ProjectStatus, StepKey, Character, Chapter } from '@book-studio/shared';
 import { createInteraction, extractText, extractJSON, extractImage } from '../gemini/geminiClient.js';
 import { TEXT_MODEL, IMAGE_MODEL } from '../gemini/config.js';
-import { MAX_CHARACTERS } from './caps.js';
+import { MAX_CHARACTERS, MAX_CHAPTERS } from './caps.js';
 import { writeImage } from '../storage/imageStorage.js';
 
 export interface StepOptions {
@@ -19,7 +19,7 @@ async function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-const CHARACTER_PROMPT_SCHEMA = {
+const PROMPT_LIST_SCHEMA = {
   type: 'array',
   items: {
     type: 'object',
@@ -31,7 +31,7 @@ const CHARACTER_PROMPT_SCHEMA = {
   },
 } as const;
 
-interface CharacterPromptResult {
+interface PromptResult {
   name: string;
   prompt: string;
 }
@@ -43,7 +43,7 @@ export const STEP_DEFINITIONS: StepDefinition[] = [
     toStatus: 'STYLE_SET',
     async run(project, options) {
       if (!project.textChainLastId) {
-        throw new Error('Project has no text chain to continue from, book upload may have failed.');
+        throw new Error('Project has no text chain to continue from — book upload may have failed.');
       }
 
       const userStyle = options?.userStyle?.trim();
@@ -85,11 +85,11 @@ export const STEP_DEFINITIONS: StepDefinition[] = [
         responseFormat: {
           type: 'text',
           mime_type: 'application/json',
-          schema: CHARACTER_PROMPT_SCHEMA,
+          schema: PROMPT_LIST_SCHEMA,
         },
       });
 
-      const rawCharacters = extractJSON<CharacterPromptResult[]>(interaction);
+      const rawCharacters = extractJSON<PromptResult[]>(interaction);
       const capped = rawCharacters.slice(0, MAX_CHARACTERS);
 
       const characters: Character[] = capped.map((c) => ({
@@ -112,6 +112,7 @@ export const STEP_DEFINITIONS: StepDefinition[] = [
       if (project.characters.length === 0) {
         throw new Error('Project has no characters to generate portraits for.');
       }
+
       let lastImageInteractionId = (
         await createInteraction({
           model: IMAGE_MODEL,
@@ -155,12 +156,39 @@ export const STEP_DEFINITIONS: StepDefinition[] = [
     key: 'CHAPTERS',
     fromStatus: 'PORTRAITS_GENERATED',
     toStatus: 'CHAPTERS_GENERATED',
-    async run() {
-      await delay(50);
+    async run(project) {
+      if (!project.textChainLastId) {
+        throw new Error('Project has no text chain to continue from — characters step may not have completed.');
+      }
+
+      const interaction = await createInteraction({
+        model: TEXT_MODEL,
+        input:
+          'Now, for each chapter of the book, give me a prompt to illustrate what happens in it. ' +
+          'It should be a single image, not a multi-tiled page. Be very descriptive, especially of ' +
+          'the characters. Remember to tell their name and to reuse the character prompts if they ' +
+          'appear in the images. Also list all characters who appear in it.',
+        previousInteractionId: project.textChainLastId,
+        responseFormat: {
+          type: 'text',
+          mime_type: 'application/json',
+          schema: PROMPT_LIST_SCHEMA,
+        },
+      });
+
+      const rawChapters = extractJSON<PromptResult[]>(interaction);
+
+      const capped = rawChapters.slice(0, MAX_CHAPTERS);
+
+      const chapters: Chapter[] = capped.map((c) => ({
+        name: c.name,
+        prompt: c.prompt,
+        illustrationPath: null,
+      }));
+
       return {
-        chapters: [
-          { name: 'Mock Chapter 1', prompt: 'placeholder prompt', illustrationPath: null },
-        ],
+        chapters,
+        textChainLastId: interaction.id,
       };
     },
   },
