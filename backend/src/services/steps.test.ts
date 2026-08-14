@@ -1,3 +1,4 @@
+// backend/src/services/steps.test.ts
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import type { Project } from '@book-studio/shared';
 import { STEP_DEFINITIONS } from './steps.js';
@@ -37,7 +38,7 @@ const charactersStep = STEP_DEFINITIONS.find((s) => s.key === 'CHARACTERS')!;
 const portraitsStep = STEP_DEFINITIONS.find((s) => s.key === 'PORTRAITS')!;
 
 afterEach(() => {
-  vi.restoreAllMocks();
+  vi.clearAllMocks();
 });
 
 describe('CHARACTERS step', () => {
