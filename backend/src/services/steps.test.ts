@@ -36,6 +36,7 @@ function makeProject(overrides: Partial<Project> = {}): Project {
 const charactersStep = STEP_DEFINITIONS.find((s) => s.key === 'CHARACTERS')!;
 const portraitsStep = STEP_DEFINITIONS.find((s) => s.key === 'PORTRAITS')!;
 const chaptersStep = STEP_DEFINITIONS.find((s) => s.key === 'CHAPTERS')!;
+const illustrationsStep = STEP_DEFINITIONS.find((s) => s.key === 'ILLUSTRATIONS')!;
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -364,5 +365,126 @@ describe('CHAPTERS step', () => {
   it('throws a clear error if the project has no text chain to continue from', async () => {
     const project = makeProject({ status: 'PORTRAITS_GENERATED', textChainLastId: null });
     await expect(chaptersStep.run(project)).rejects.toThrow('text chain');
+  });
+});
+
+describe('ILLUSTRATIONS step', () => {
+  let tempDataDir: string;
+
+  beforeEach(async () => {
+    tempDataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'book-studio-test-'));
+    process.env.DATA_DIR = tempDataDir;
+  });
+
+  afterEach(async () => {
+    await fs.rm(tempDataDir, { recursive: true, force: true });
+    delete process.env.DATA_DIR;
+  });
+
+  it('generates one illustration per chapter and saves real files to disk', async () => {
+    vi.mocked(geminiClient.createInteraction)
+      .mockResolvedValueOnce({ id: 'transition-id', status: 'completed', model: 'x', steps: [] })
+      .mockResolvedValueOnce({ id: 'illustration-1-id', status: 'completed', model: 'x', steps: [] });
+
+    vi.mocked(geminiClient.extractImage).mockReturnValue({
+      data: Buffer.from('fake chapter image').toString('base64'),
+      mimeType: 'image/png',
+    });
+
+    const project = makeProject({
+      status: 'CHAPTERS_GENERATED',
+      imageChainLastId: 'last-portrait-interaction-id',
+      chapters: [{ name: 'Chapter One', prompt: 'a scene', illustrationPath: null }],
+    });
+
+    const result = await illustrationsStep.run(project);
+
+    expect(result.chapters).toHaveLength(1);
+    expect(result.chapters?.[0]?.illustrationPath).toMatch(/illustration-chapter-one\.png$/);
+
+    const savedBytes = await fs.readFile(result.chapters![0]!.illustrationPath!);
+    expect(savedBytes.toString()).toBe('fake chapter image');
+  });
+
+  it('the transition call CONTINUES the existing image chain, unlike Portraits which starts fresh', async () => {
+    vi.mocked(geminiClient.createInteraction)
+      .mockResolvedValueOnce({ id: 'transition-id', status: 'completed', model: 'x', steps: [] })
+      .mockResolvedValueOnce({ id: 'illustration-1-id', status: 'completed', model: 'x', steps: [] });
+
+    vi.mocked(geminiClient.extractImage).mockReturnValue({
+      data: Buffer.from('x').toString('base64'),
+      mimeType: 'image/png',
+    });
+
+    const project = makeProject({
+      status: 'CHAPTERS_GENERATED',
+      imageChainLastId: 'last-portrait-interaction-id',
+      chapters: [{ name: 'Chapter One', prompt: 'a scene', illustrationPath: null }],
+    });
+
+    await illustrationsStep.run(project);
+
+    const firstCallArgs = vi.mocked(geminiClient.createInteraction).mock.calls[0]![0];
+    expect(firstCallArgs.previousInteractionId).toBe('last-portrait-interaction-id');
+  });
+
+  it('each chapter illustration chains sequentially off the previous image interaction', async () => {
+    vi.mocked(geminiClient.createInteraction)
+      .mockResolvedValueOnce({ id: 'transition-id', status: 'completed', model: 'x', steps: [] })
+      .mockResolvedValueOnce({ id: 'illustration-1-id', status: 'completed', model: 'x', steps: [] });
+
+    vi.mocked(geminiClient.extractImage).mockReturnValue({
+      data: Buffer.from('x').toString('base64'),
+      mimeType: 'image/png',
+    });
+
+    const project = makeProject({
+      status: 'CHAPTERS_GENERATED',
+      imageChainLastId: 'last-portrait-interaction-id',
+      chapters: [{ name: 'Chapter One', prompt: 'a scene', illustrationPath: null }],
+    });
+
+    await illustrationsStep.run(project);
+
+    const calls = vi.mocked(geminiClient.createInteraction).mock.calls;
+    expect(calls[1]![0].previousInteractionId).toBe('transition-id');
+  });
+
+  it('returns imageChainLastId as the final illustration interaction id', async () => {
+    vi.mocked(geminiClient.createInteraction)
+      .mockResolvedValueOnce({ id: 'transition-id', status: 'completed', model: 'x', steps: [] })
+      .mockResolvedValueOnce({ id: 'final-illustration-id', status: 'completed', model: 'x', steps: [] });
+
+    vi.mocked(geminiClient.extractImage).mockReturnValue({
+      data: Buffer.from('x').toString('base64'),
+      mimeType: 'image/png',
+    });
+
+    const project = makeProject({
+      status: 'CHAPTERS_GENERATED',
+      imageChainLastId: 'last-portrait-interaction-id',
+      chapters: [{ name: 'Chapter One', prompt: 'a scene', illustrationPath: null }],
+    });
+
+    const result = await illustrationsStep.run(project);
+    expect(result.imageChainLastId).toBe('final-illustration-id');
+  });
+
+  it('throws if the project has no chapters to illustrate', async () => {
+    const project = makeProject({
+      status: 'CHAPTERS_GENERATED',
+      imageChainLastId: 'last-portrait-interaction-id',
+      chapters: [],
+    });
+    await expect(illustrationsStep.run(project)).rejects.toThrow('no chapters');
+  });
+
+  it('throws if there is no image chain to continue from (Portraits never ran)', async () => {
+    const project = makeProject({
+      status: 'CHAPTERS_GENERATED',
+      imageChainLastId: null,
+      chapters: [{ name: 'Chapter One', prompt: 'a scene', illustrationPath: null }],
+    });
+    await expect(illustrationsStep.run(project)).rejects.toThrow('image chain');
   });
 });
