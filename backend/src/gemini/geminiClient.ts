@@ -15,11 +15,40 @@ function getApiKey(): string {
   return key;
 }
 
+
+async function waitForFileActive(fileName: string, apiKey: string): Promise<void> {
+  const maxAttempts = 20;
+  const delayMs = 1000;
+ 
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const response = await fetch(`${BASE_URL}/v1beta/${fileName}`, {
+      headers: { 'x-goog-api-key': apiKey },
+    });
+ 
+    if (!response.ok) {
+      throw new Error(`Failed to check file status: ${response.status} ${await response.text()}`);
+    }
+ 
+    const file = (await response.json()) as { state: string };
+ 
+    if (file.state === 'ACTIVE') {
+      return;
+    }
+    if (file.state === 'FAILED') {
+      throw new Error(`Gemini file processing failed for ${fileName}`);
+    }
+ 
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+ 
+  throw new Error(`Gemini file ${fileName} did not become ACTIVE within the expected time.`);
+}
+ 
 export async function uploadFile(filePath: string, mimeType: string): Promise<GeminiFile> {
   const apiKey = getApiKey();
   const bytes = await fs.readFile(filePath);
   const numBytes = bytes.byteLength;
-
+ 
   const startResponse = await fetch(`${BASE_URL}/upload/v1beta/files`, {
     method: 'POST',
     headers: {
@@ -32,17 +61,16 @@ export async function uploadFile(filePath: string, mimeType: string): Promise<Ge
     },
     body: JSON.stringify({ file: { display_name: filePath.split('/').pop() } }),
   });
-
+ 
   if (!startResponse.ok) {
     throw new Error(`Gemini file upload (start) failed: ${startResponse.status} ${await startResponse.text()}`);
   }
-
+ 
   const uploadUrl = startResponse.headers.get('x-goog-upload-url');
   if (!uploadUrl) {
     throw new Error('Gemini file upload did not return an upload URL.');
   }
-
-  // Step 2: send the actual bytes, finalize.
+ 
   const uploadResponse = await fetch(uploadUrl, {
     method: 'POST',
     headers: {
@@ -52,12 +80,19 @@ export async function uploadFile(filePath: string, mimeType: string): Promise<Ge
     },
     body: bytes,
   });
-
+ 
   if (!uploadResponse.ok) {
     throw new Error(`Gemini file upload (finalize) failed: ${uploadResponse.status} ${await uploadResponse.text()}`);
   }
-
-  const result = (await uploadResponse.json()) as { file: { uri: string; name: string; mimeType: string } };
+ 
+  const result = (await uploadResponse.json()) as {
+    file: { uri: string; name: string; mimeType: string; state: string };
+  };
+ 
+  if (result.file.state !== 'ACTIVE') {
+    await waitForFileActive(result.file.name, apiKey);
+  }
+ 
   return {
     uri: result.file.uri,
     name: result.file.name,
