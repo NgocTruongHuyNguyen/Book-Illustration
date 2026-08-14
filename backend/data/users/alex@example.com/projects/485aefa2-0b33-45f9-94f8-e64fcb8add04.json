@@ -1,0 +1,27 @@
+{
+  "id": "485aefa2-0b33-45f9-94f8-e64fcb8add04",
+  "userEmail": "alex@example.com",
+  "title": "Test Book",
+  "bookTextPath": "/Users/huynguyenngoctruong/book-illustration-studio/backend/data/books/485aefa2-0b33-45f9-94f8-e64fcb8add04.txt",
+  "createdAt": "2026-08-14T02:15:06.761Z",
+  "status": "PORTRAITS_GENERATED",
+  "stepState": "IDLE",
+  "stepStartedAt": null,
+  "stepError": null,
+  "textChainLastId": null,
+  "imageChainLastId": null,
+  "style": "MOCK STYLE (replace with real Gemini call",
+  "characters": [
+    {
+      "name": "Mock Character A",
+      "prompt": "placeholder prompt",
+      "portraitPath": "/mock/portrait-Mock Character A.png"
+    },
+    {
+      "name": "Mock Character B",
+      "prompt": "placeholder prompt",
+      "portraitPath": "/mock/portrait-Mock Character B.png"
+    }
+  ],
+  "chapters": []
+}

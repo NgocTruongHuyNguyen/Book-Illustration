@@ -3,12 +3,13 @@ import { readFile } from '../storage/readFile.js';
 import { writeFile } from '../storage/writeFile.js';
 import { withLock } from '../storage/withLock.js';
 import { getNextStep } from './steps.js';
-import { NoNextStepError } from './pipelineErrors.js';
+import { NoNextStepError, StepNotStuckError } from './pipelineErrors.js';
 
 export type RunStepResult =
   | { outcome: 'started'; project: Project }
   | { outcome: 'already-running'; project: Project };
 
+export const STUCK_STEP_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes
 export async function runStep(userEmail: string, projectId: string): Promise<RunStepResult> {
   const claim = await withLock(projectId, async () => {
     const project = await readFile(userEmail, projectId);
@@ -36,7 +37,6 @@ export async function runStep(userEmail: string, projectId: string): Promise<Run
     return { outcome: 'already-running', project: claim.project };
   }
 
-  // The actual step work happens OUTSIDE the lock, so a single slow Gemini call doesn't block reads/writes to this project for its full duration.
   const step = getNextStep(claim.project.status);
   if (!step) {
     throw new NoNextStepError(projectId);
@@ -75,9 +75,23 @@ export async function runStep(userEmail: string, projectId: string): Promise<Run
   return { outcome: 'started', project: finalProject };
 }
 
+export function isStepStale(project: Project, timeoutMs: number = STUCK_STEP_TIMEOUT_MS): boolean {
+  if (project.stepState !== 'RUNNING' || !project.stepStartedAt) {
+    return false;
+  }
+  const elapsed = Date.now() - new Date(project.stepStartedAt).getTime();
+  return elapsed > timeoutMs;
+}
+
 export async function retryStuckStep(userEmail: string, projectId: string): Promise<Project> {
   return withLock(projectId, async () => {
     const project = await readFile(userEmail, projectId);
+
+    const isRetryable = project.stepState === 'FAILED' || isStepStale(project);
+    if (!isRetryable) {
+      throw new StepNotStuckError(projectId);
+    }
+
     const reset: Project = {
       ...project,
       stepState: 'IDLE',
@@ -87,12 +101,4 @@ export async function retryStuckStep(userEmail: string, projectId: string): Prom
     await writeFile(reset);
     return reset;
   });
-}
-
-export function isStepStale(project: Project, timeoutMs: number): boolean {
-  if (project.stepState !== 'RUNNING' || !project.stepStartedAt) {
-    return false;
-  }
-  const elapsed = Date.now() - new Date(project.stepStartedAt).getTime();
-  return elapsed > timeoutMs;
 }

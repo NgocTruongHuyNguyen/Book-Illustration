@@ -6,6 +6,7 @@ import type { Project } from '@book-studio/shared';
 import { writeFile } from '../storage/writeFile.js';
 import { readFile } from '../storage/readFile.js';
 import { runStep, retryStuckStep, isStepStale } from './pipipelineService.js';
+import { StepNotStuckError } from './pipelineErrors.js';
 import * as stepsModule from './steps.js';
 
 function makeProject(overrides: Partial<Project> = {}): Project {
@@ -60,6 +61,8 @@ describe('runStep', () => {
 
     const result = await runStep(project.userEmail, project.id);
 
+    // whatever the mock STYLE step produces, status must be STYLE_SET next,
+    // never CHARACTERS_GENERATED or anything further along
     expect(result.project.status).toBe('STYLE_SET');
   });
 
@@ -71,14 +74,11 @@ describe('runStep', () => {
     });
     await writeFile(project);
 
-    const runSpy = vi.spyOn(stepsModule, 'getNextStep');
-
     const result = await runStep(project.userEmail, project.id);
 
     expect(result.outcome).toBe('already-running');
-    // status must be untouched 
+    // status must be untouched — no step actually executed
     expect(result.project.status).toBe('CREATED');
-    runSpy.mockRestore();
   });
 
   it('records a failure and sets stepState to FAILED when a step throws', async () => {
@@ -128,7 +128,7 @@ describe('retryStuckStep', () => {
     const project = makeProject({
       status: 'CHARACTERS_GENERATED',
       stepState: 'RUNNING',
-      stepStartedAt: new Date(Date.now() - 999999).toISOString(),
+      stepStartedAt: new Date(Date.now() - 999999).toISOString(), // well past the timeout
       characters: [{ name: 'Existing', prompt: 'p', portraitPath: null }],
     });
     await writeFile(project);
@@ -139,6 +139,42 @@ describe('retryStuckStep', () => {
     expect(reset.stepStartedAt).toBeNull();
     expect(reset.status).toBe('CHARACTERS_GENERATED'); // unchanged
     expect(reset.characters).toHaveLength(1); // unchanged
+  });
+
+  it('resets a FAILED step back to IDLE and clears the error', async () => {
+    const project = makeProject({
+      status: 'STYLE_SET',
+      stepState: 'FAILED',
+      stepError: 'gemini exploded',
+    });
+    await writeFile(project);
+
+    const reset = await retryStuckStep(project.userEmail, project.id);
+
+    expect(reset.stepState).toBe('IDLE');
+    expect(reset.stepError).toBeNull();
+  });
+
+  it('rejects retrying a project that is IDLE — nothing to retry', async () => {
+    const project = makeProject({ status: 'STYLE_SET', stepState: 'IDLE' });
+    await writeFile(project);
+
+    await expect(retryStuckStep(project.userEmail, project.id)).rejects.toThrow(
+      StepNotStuckError
+    );
+  });
+
+  it('rejects retrying a project that is RUNNING but not yet past the stale timeout', async () => {
+    const project = makeProject({
+      status: 'STYLE_SET',
+      stepState: 'RUNNING',
+      stepStartedAt: new Date().toISOString(), // just started, not stale
+    });
+    await writeFile(project);
+
+    await expect(retryStuckStep(project.userEmail, project.id)).rejects.toThrow(
+      StepNotStuckError
+    );
   });
 });
 

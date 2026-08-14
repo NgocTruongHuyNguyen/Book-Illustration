@@ -1,13 +1,16 @@
 export class NoNextStepError extends Error {
   constructor(projectId: string) {
-    super(`No next step available for project ${projectId}. It may already be DONE.`);
+    super(`No next step available for project ${projectId} — it may already be DONE.`);
     this.name = 'NoNextStepError';
   }
 }
 
-export class StepAlreadyRunningError extends Error {
+export class StepNotStuckError extends Error {
   constructor(projectId: string) {
-    super(`A step is already running for project ${projectId}.`);
-    this.name = 'StepAlreadyRunningError';
+    super(
+      `Project ${projectId} is not in a retryable state. Retry is only allowed ` +
+        `when a step has FAILED, or is RUNNING and stuck past the timeout.`
+    );
+    this.name = 'StepNotStuckError';
   }
 }
