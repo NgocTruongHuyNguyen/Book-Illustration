@@ -166,29 +166,76 @@ async function writeFile(project: Project): Promise<void> {
 
 ## No duplicate Gemini calls
 ``` typescript
-async function runStep(projectId: string, stepKey: StepKey): Promise<void> {
-  const alreadyRunning = await withProjectLock(projectId, async () => {
-    const project = await readProjectFile(projectId);
+async function runStep(
+  userEmail: string,
+  projectId: string,
+  options?: StepOptions
+): Promise<RunStepResult> {
+  const claim = await withLock(projectId, async () => {
+    const project = await readFile(userEmail, projectId);
+ 
     if (project.stepState === 'RUNNING') {
-      return true;
+      return { claimed: false as const, project };
     }
-    project.stepState = 'RUNNING';
-    project.stepStartedAt = new Date().toISOString();
-    project.stepError = null;
-    await writeProjectFile(project);
-    return false;
+ 
+    const step = getNextStep(project.status);
+    if (!step) {
+      throw new NoNextStepError(projectId);
+    }
+ 
+    const updated: Project = {
+      ...project,
+      stepState: 'RUNNING',
+      stepStartedAt: new Date().toISOString(),
+      stepError: null,
+    };
+    await writeFile(updated);
+    return { claimed: true as const, project: updated };
   });
-
-  if (alreadyRunning) {
-    return; // caller returns current state, no new Gemini call
+ 
+  if (!claim.claimed) {
+    return { outcome: 'already-running', project: claim.project };
   }
-
-  // Gemini call happens here, outside the lock, so a single slow call
-  // does not block reads/writes to this project for its full duration.
-  // A second locked write records the result or the failure afterward.
+ 
+  const step = getNextStep(claim.project.status);
+  if (!step) {
+    throw new NoNextStepError(projectId);
+  }
+ 
+  try {
+    const resultFields = await step.run(claim.project, options); // <-- options passed through here
+ 
+    await withLock(projectId, async () => {
+      const latest = await readFile(userEmail, projectId);
+      const finished: Project = {
+        ...latest,
+        ...resultFields,
+        status: step.toStatus,
+        stepState: 'IDLE',
+        stepStartedAt: null,
+        stepError: null,
+      };
+      await writeFile(finished);
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    await withLock(projectId, async () => {
+      const latest = await readFile(userEmail, projectId);
+      const failed: Project = {
+        ...latest,
+        stepState: 'FAILED',
+        stepError: message,
+      };
+      await writeFile(failed);
+    });
+    throw err;
+  }
+ 
+  const finalProject = await readFile(userEmail, projectId);
+  return { outcome: 'started', project: finalProject };
 }
 ```
 - The step state is written as RUNNING before the Gemini call is made, not after. This ordering is what makes a refresh, a second tab, or a double-click safe, because the lock check happens before the network call starts, not around it.
 
 ## Stuck-step recovery
-- If stepState has been RUNNING longer than a defined timeout, the UI exposes a manual retry action. Real Gemini calls run 10 to 30 seconds or more, longer for image generation, so the timeout needs to be generous, not modeled on the reference demo's few-second delays. Retries are always user-triggered. Nothing auto-retries a Gemini call in a loop.
+- The concrete timeout used is STUCK_STEP_TIMEOUT_MS = 3 minutes, defined in pipelineService.ts. This is well above the 10-30s+ a real Gemini call takes, including image generation, so a step that is still genuinely in progress is never mistaken for stuck. retryStuckStep only succeeds when a step has actually FAILED, or is RUNNING and has exceeded this timeout. Calling it on a step in profress is rejecte with StepNotStuckError, not silently allowed.
