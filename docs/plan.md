@@ -31,6 +31,8 @@ Backend must persist both chains' latest interaction IDs per project.
 ## Models
 - Text steps (Style, Characters, Chapters): GEMINI_MODEL_ID = gemini-3.6-flash
 - Image steps (Portraits, Illustrations): IMAGE_MODEL_ID = gemini-2.5-flash-image
+- The notebook default version for text is gemini-3.7-flash
+- The notebook default version for image is gemini-3.1-flash-lite-image
 ## Step 1 — Style
 - Call type: client.interactions.create(model=..., input=<prompt>,
   previous_interaction_id=book_interaction.id, service_tier=...)`
