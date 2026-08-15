@@ -5,7 +5,7 @@ Turns a book's text into character portraits and a chapter illustration, using t
 ## Prerequisites
 
 - Node.js 18+
-- A Gemini API key with access to a current Gemini text model and the Gemini 2.5 Flash Image ("Nano Banana") model.
+- A Gemini API key with access to a current Gemini text model which is gemini-3.6-flash and the Gemini 2.5 Flash Image ("Nano Banana") model.
 
 ## Setup
 
