@@ -6,6 +6,11 @@ I also considered Next.js instead of React because Next.js gives more structure 
 The cost of this combination overall is that nothing comes wired together. 
 Routing, request validation, session handling, and the API layer connecting frontend to backend all have to be set up by hand, where a more opinionated framework like Next.js would give some of that for free. I'm accepting that in exchange for speed from familiarity and not having to learn a new framework mid-assessment.
 
+# Model choice: text and image models
+Image model is gemini-2.5-flash-image, the Nano Banana model. Picked it because it is cheaper, fits the scope of this project, and does not waste a lot of token. It might generate at lower resolution compared to heavier models, but since it is grounded in the text prompt from the earlier steps, it can still produce something reasonably close to what is described, resolution is not the priority here, correctness to the prompt is.
+
+Text model is gemini-3.6-flash. Text is not as tight a constraint as image since it does not burn through quota the same way, so I picked the newest version available so it can reason smarter about character descriptions and chapter prompts. Text actually matters more in this pipeline than the image model does, since most of the real ideas, character personalities, story details, art direction, all come from text first and the image steps just render what the text already worked out. So getting the newest and smartest text model made more sense than optimizing that side for cost.
+
 # Why I choose JSON files instead of DB (Claude suggest SQLite)
 Claude suggested SQLite over JSON files, since it avoids hand-rolling 
 concurrency safety and gives transactions for free. I disagreed for this 
@@ -52,3 +57,6 @@ Two Portraits tests were failing with a call argument that didn't make sense, a 
 
 # Constraining the STYLE prompt output format
 Testing the Style step for real, Gemini came back with a full markdown essay, headers, bullet points, a "reusable prompt tag" section, even a question back to me asking about genre. The original prompt just said "define an art style" with no format constraint, so Gemini treated it like a chat answer instead of a value to reuse. It didn't actually break the pipeline since the chain remembers it either way, but it looked terrible in the UI and every later prompt reusing it would carry all that markdown noise. Tightened the prompt to explicitly ask for plain text only, no markdown, no meta-commentary, no questions back. Cost is just a few more sentences in the prompt, but I only caught this because I actually ran it and looked at the output instead of trusting that a 200 response meant it was fine.
+
+# If I had one more day
+I'd spend most of it testing deeper than I could this round, deliberately doing dumb things a real user might do like double submitting, going back mid step, pasting weird content, to find what actually breaks instead of just following the happy path. I'd also add more guard rails on the frontend so those things fail gracefully instead of just being possible in the first place, things like disabling buttons more aggressively during in flight actions and validating edge cases in the forms I didn't fully cover. I'd build the retry/attempt history the bonus section mentions, since right now a retry silently replaces the failed attempt with no record it happened, and for a pipeline that costs real Gemini quota per try, seeing what was attempted and why it failed would matter in a real product. Last would be UI and UX polish, spacing, empty states, small interaction details, but honestly for an MVP I think what's here is enough, so that one's genuinely last on the list rather than something I'd get to first.
